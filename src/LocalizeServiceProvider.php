@@ -16,6 +16,7 @@ use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
 use Vortech\Localize\Console\InstallCommand;
+use Vortech\Localize\Console\TableCommand;
 use Vortech\Localize\Exceptions\InvalidTranslationDefinition;
 use Vortech\Localize\Http\Middleware\SetLocale;
 use Vortech\Localize\Routing\LocaleLinks;
@@ -71,7 +72,7 @@ final class LocalizeServiceProvider extends ServiceProvider
             $this->publishes([__DIR__.'/../resources/views' => $this->app->resourcePath('views/vendor/localize')], 'localize-views');
             $this->publishes([__DIR__.'/../config/localize.php' => $this->app->configPath('localize.php')], 'localize-config');
 
-            $this->commands([InstallCommand::class]);
+            $this->commands([InstallCommand::class, TableCommand::class]);
         }
     }
 }

@@ -67,6 +67,13 @@ The listed columns are not part of the model's `$fillable`: they live in the tra
 
 ### 2. Create the tables
 
+```bash
+php artisan localize:table Product
+php artisan localize:table              # asks which model, from the ones in app/ that use HasLocales
+```
+
+generates the migration below from the model: the table name, the key type (`foreignId`, `foreignUlid` or `foreignUuid`), a nullable `string` per declared column (`text` for `body`, `content`, `description`, `excerpt`, `notes`, `summary` and `text`), the `(product_id, locale)` unique index and, with `#[LocalizedSlug]`, the `(locale, slug)` one. Check the column types before you migrate. It accepts a class name or a short name from `App\Models`, and `--force` replaces a migration generated before. Written by hand it looks like this:
+
 The schema is yours, in a migration you version. The translation table is the singular of the model's table plus `_translations`, with the model's foreign key (`product_id`).
 
 ```php

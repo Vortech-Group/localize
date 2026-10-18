@@ -27,7 +27,7 @@
     <text x="24" y="76" fill="#8b8c8a">$product-&gt;<tspan fill="#f4f4f2">locale</tspan>(<tspan fill="#CF000F">'en'</tspan>)-&gt;name</text>
     <text x="24" y="100" fill="#CF000F">Black T-shirt</text>
 
-    <text x="24" y="140" fill="#8b8c8a">$product-&gt;<tspan fill="#f4f4f2">locale</tspan>(<tspan fill="#CF000F">'de'</tspan>)-&gt;name</text>
+    <text x="24" y="140" fill="#8b8c8a">$product-&gt;<tspan fill="#f4f4f2">locale</tspan>(<tspan fill="#CF000F">'hu'</tspan>)-&gt;name</text>
     <text x="24" y="164" fill="#CF000F">Fekete póló</text>
 
     <text x="24" y="204" fill="#8b8c8a">$product-&gt;<tspan fill="#f4f4f2">saveLocales</tspan>([<tspan fill="#CF000F">'hu'</tspan> =&gt; [...]])</text>

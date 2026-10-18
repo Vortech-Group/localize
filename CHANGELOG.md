@@ -18,6 +18,7 @@ All notable changes to `laravel-localize` will be documented in this file
 - `LocaleLinks`, `<x-localize::head />` and `<x-localize::switcher />`: the URL of the current page in every locale (switcher), canonical and hreflang links; locales without a slug are unavailable
 - `whereLocale()` and `withLocales()` query scopes: find models by a column of one locale, and eager load all or some locales (always with the app locale for the fallback)
 - `toArray()`, `toJson()` and JSON serialization on the view, in declaration order
+- `php artisan localize:table Product` generates the migration of a model's translation table (and asks for the model with Laravel Prompts when none is given): key type, column types, the owner/locale unique index and the slug index
 - `php artisan localize:install` publishes the config file: `locale_length`, `table_suffix` and `locales`
 - Exceptions: `InvalidTranslationDefinition`, `InvalidTranslationPayload`, `UnknownTranslationAttribute`, `UnsavedTranslationOwner`
 - PHP 8.4+ with Laravel 13; tested on SQLite, MySQL and PostgreSQL
