@@ -17,6 +17,7 @@ All notable changes to `laravel-localize` will be documented in this file
 - Route model binding on translated slugs: with `#[LocalizedSlug]` the slug is the route key, `{article}` binds in the URL's locale without fallback and `route('articles.show', $article)` builds the URL; `{article:id}` still binds by id
 - `LocaleLinks`, `<x-localize::head />` and `<x-localize::switcher />`: the URL of the current page in every locale (switcher), canonical and hreflang links; locales without a slug are unavailable
 - `whereLocale()` and `withLocales()` query scopes: find models by a column of one locale, and eager load all or some locales (always with the app locale for the fallback)
+- `#[Localized(..., magic: true)]`: opt-in reading of a translated column as a property (`$model->name` is the current app locale's value, `locale('hu')->name` still works); assigning it throws
 - `toArray()`, `toJson()` and JSON serialization on the view, in declaration order
 - `php artisan localize:table Product` generates the migration of a model's translation table (and asks for the model with Laravel Prompts when none is given): key type, column types, the owner/locale unique index and the slug index
 - `php artisan localize:install` publishes the config file: `locale_length`, `table_suffix` and `locales`

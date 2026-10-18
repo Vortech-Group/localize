@@ -5,7 +5,7 @@ description: Build, query and debug translated Eloquent models with vortech/lara
 
 # Localize development
 
-Localize stores translations in a table of their own per model (`product_translations`) with real, typed columns. Reading goes through an explicit locale view, writing through one transactional writer. There are no translation classes and nothing is translated implicitly: `$product->name` is never magic.
+Localize stores translations in a table of their own per model (`product_translations`) with real, typed columns. Reading goes through an explicit locale view, writing through one transactional writer. There are no translation classes and nothing is translated implicitly: `$product->name` is not magic unless the model opts in with `#[Localized(..., magic: true)]`.
 
 ## Setup
 
@@ -52,6 +52,7 @@ $product->locale('en')->toArray();                 // declared columns in order;
 - Reading an undeclared column throws `UnknownTranslationAttribute`. An unsaved model returns `null` for everything, without a query.
 - **Fill edit forms with `fallback: false`**, otherwise a user sees another language's text as a finished translation and saves it back.
 - `$view->name = 'x'` throws; write with `update()`.
+- **`magic: true`**: `#[Localized('name', magic: true)]` makes `$model->name` read the current app locale (like `$model->locale()->name`; `$model->locale('hu')->name` keeps working). It uses the `locales` relation, so eager load in lists. Assigning it (also through `fill()` or `create()`) throws `LogicException`; save with `locale()->update()` or `saveLocales()`. A real attribute with a value wins, and the array form never includes the column. Without the option `$model->name` is simply `null`.
 
 ## Write
 
@@ -167,10 +168,6 @@ Saved after creation, so `make()` saves nothing.
 | `InvalidTranslationPayload` | bad locale key, a non-array locale, a value that is not string or null |
 | `UnknownTranslationAttribute` | an undeclared column read, written or used in a rule |
 | `UnsavedTranslationOwner` | writing for a model that is not saved |
-
-## Not supported
-
-Reading with `$model->name`, translating arrays or relations, completeness reports, machine translation, per-column required attributes, automatic tenant scoping, optimistic locking. Databases in CI: SQLite, MySQL, PostgreSQL.
 
 ## Testing
 

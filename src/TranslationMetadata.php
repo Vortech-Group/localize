@@ -27,6 +27,9 @@ final class TranslationMetadata
     /** @var array<class-string, list<string>> */
     private static array $declared = [];
 
+    /** @var array<class-string, bool> */
+    private static array $magic = [];
+
     /** @var array<class-string, ?LocalizedSlug> */
     private static array $slugs = [];
 
@@ -84,6 +87,24 @@ final class TranslationMetadata
     }
 
     /**
+     * The declared columns when the model asked for `magic: true`, else none.
+     * A model without a valid declaration has none, so reading its attributes never throws.
+     *
+     * @param  class-string  $class
+     * @return list<string>
+     */
+    public static function magicFields(string $class): array
+    {
+        try {
+            $fields = self::fields($class);
+        } catch (InvalidTranslationDefinition) {
+            return [];
+        }
+
+        return self::$magic[$class] ? $fields : [];
+    }
+
+    /**
      * The slug rule from the nearest class that declares #[LocalizedSlug], if any.
      *
      * @param  class-string  $class
@@ -123,6 +144,7 @@ final class TranslationMetadata
     public static function flush(): void
     {
         self::$declared = [];
+        self::$magic = [];
         self::$slugs = [];
     }
 
@@ -139,7 +161,8 @@ final class TranslationMetadata
                 continue;
             }
 
-            $fields = array_values(array_unique($attributes[0]->newInstance()->fields));
+            $localized = $attributes[0]->newInstance();
+            $fields = array_values(array_unique($localized->fields));
 
             if ($fields === []) {
                 throw InvalidTranslationDefinition::noFields($reflection->getName());
@@ -154,6 +177,8 @@ final class TranslationMetadata
                     throw InvalidTranslationDefinition::reservedField($reflection->getName(), $field);
                 }
             }
+
+            self::$magic[$class] = $localized->magic;
 
             return $fields;
         }

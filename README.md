@@ -127,6 +127,19 @@ $product->locale('en', fallback: false)->description;  // null
 
 `app.fallback_locale` is not a step, and there is no `en-GB` → `en` or "first existing language" fallback. Reading an undeclared column throws `UnknownTranslationAttribute`.
 
+**Reading as a property.** `$product->name` is not translated unless the model opts in:
+
+```php
+#[Localized('slug', 'name', 'description', magic: true)]
+class Product extends Model { use HasLocales; }
+
+$product->name;                  // the same as $product->locale()->name (the current app locale)
+$product->locale('hu')->name;    // an explicit locale keeps working
+$product->name = 'x';            // LogicException: write with locale()->update() or saveLocales()
+```
+
+Reading `$product->name` goes through the `locales` relation like any view, so eager load it in lists (lazy loading rules apply). Assigning is refused because the column does not exist on the model's own table. A real attribute of the same name with a value wins, so do not keep a translated column on the main table. The array form, `$fillable` and the dirty attributes never see the column.
+
 A view fixes the requested locale and the app locale when it is created. A later `app()->setLocale()` does not change it.
 
 ### 4. Write
@@ -371,11 +384,10 @@ There is no `x-default` alternate.
 
 ## Good to know
 
-- **Reading is explicit.** `$product->name` is never translated for you, and the model's own `toArray()` is untouched.
+- **Reading is explicit by default.** `$product->name` is not translated for you unless the model opts in with `#[Localized(..., magic: true)]`, and the model's own `toArray()` is untouched either way.
 - **Eloquent events do not fire** on the translation rows. Writes go through the query builder.
 - **Insert or update, never upsert.** A unique-index clash raises a `QueryException` and rolls the call back instead of rewriting another model's row. Two requests creating the same locale row at the same moment can hit that too: the index decides, retry the loser.
 - **Values are strings or `null`.** Arrays, files and relations are not translatable.
-- **Not in v1:** reading with `$model->name`, completeness reports, machine translation, required-field attributes and automatic tenant scoping.
 - **Databases:** SQLite, MySQL and PostgreSQL run in CI. MariaDB is not tested and not assumed to behave like MySQL.
 
 ## Testing

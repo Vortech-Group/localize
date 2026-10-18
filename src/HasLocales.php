@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Str;
+use LogicException;
 use Vortech\Localize\Attributes\LocalizedSlug;
 use Vortech\Localize\Exceptions\InvalidTranslationPayload;
 
@@ -76,6 +77,34 @@ trait HasLocales
         $wanted = array_values(array_unique([...(array) $locales, app()->getLocale()]));
 
         $query->with(['locales' => static fn (Relation $rows) => $rows->getQuery()->getQuery()->whereIn('locale', $wanted)]);
+    }
+
+    /**
+     * With #[Localized(..., magic: true)] a translated column reads in the
+     * current app locale. A real attribute with a value wins.
+     */
+    public function getAttribute($key)
+    {
+        $value = parent::getAttribute($key);
+
+        if ($value === null && in_array($key, TranslationMetadata::magicFields(static::class), true)) {
+            return $this->locale()->get($key);
+        }
+
+        return $value;
+    }
+
+    /**
+     * A magic column cannot be assigned: there is no such column on the model's
+     * own table. Save translations with locale()->update() or saveLocales().
+     */
+    public function setAttribute($key, $value)
+    {
+        if (in_array($key, TranslationMetadata::magicFields(static::class), true)) {
+            throw new LogicException(sprintf('"%s" is a translated column: use locale()->update([...]) or saveLocales([...]) to change it.', $key));
+        }
+
+        return parent::setAttribute($key, $value);
     }
 
     /**
