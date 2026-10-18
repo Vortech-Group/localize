@@ -21,4 +21,5 @@ All notable changes to `laravel-localize` will be documented in this file
 - `php artisan localize:table Product` generates the migration of a model's translation table (and asks for the model with Laravel Prompts when none is given): key type, column types, the owner/locale unique index and the slug index
 - `php artisan localize:install` publishes the config file: `locale_length`, `table_suffix` and `locales`
 - Exceptions: `InvalidTranslationDefinition`, `InvalidTranslationPayload`, `UnknownTranslationAttribute`, `UnsavedTranslationOwner`
+- A Laravel Boost guideline and a `localize-development` skill ship with the package (`resources/boost`), so AI agents working in an application that uses `laravel-localize` pick up how to declare models, read and write locales, validate, query and route
 - PHP 8.4+ with Laravel 13; tested on SQLite, MySQL and PostgreSQL
