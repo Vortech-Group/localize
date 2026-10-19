@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
+use Vortech\Localize\Events\TranslationChanged;
 use Vortech\Localize\Exceptions\InvalidTranslationPayload;
+use Vortech\Localize\Exceptions\LocalizeException;
 use Vortech\Localize\Exceptions\UnknownTranslationAttribute;
 use Vortech\Localize\Exceptions\UnsavedTranslationOwner;
 use Vortech\Localize\LocaleView;
@@ -237,4 +240,55 @@ it('accepts locales like en-GB and pt_BR as they are', function (): void {
     expect($product->locale('en-GB', fallback: false)->name)->toBe('Colour')
         ->and($product->locale('pt_BR', fallback: false)->name)->toBe('Cor')
         ->and($product->locale('en', fallback: false)->name)->toBeNull();
+});
+
+it('dispatches an event for every column that changed', function (): void {
+    Event::fake([TranslationChanged::class]);
+
+    $product = product('A');
+    $product->saveLocales(['en' => ['name' => 'Black', 'slug' => 'black']]);
+    $product->saveLocales(['en' => ['name' => 'Black', 'slug' => 'dark'], 'hu' => ['name' => 'Fekete']]);
+
+    $events = Event::dispatched(TranslationChanged::class)
+        ->map(fn (array $args): array => [$args[0]->locale, $args[0]->key, $args[0]->oldValue, $args[0]->newValue])
+        ->all();
+
+    expect($events)->toBe([
+        ['en', 'name', null, 'Black'],
+        ['en', 'slug', null, 'black'],
+        ['en', 'slug', 'black', 'dark'],
+        ['hu', 'name', null, 'Fekete'],
+    ]);
+});
+
+it('dispatches no event when the write fails', function (): void {
+    Event::fake([TranslationChanged::class]);
+
+    try {
+        product('A')->saveLocales(['en' => ['name' => 'Black'], 'hu' => ['nope' => 'x']]);
+    } catch (LocalizeException) {
+    }
+
+    Event::assertNotDispatched(TranslationChanged::class);
+});
+
+it('dispatches the events only after an outer transaction commits', function (): void {
+    Event::fake([TranslationChanged::class]);
+
+    $product = product('A');
+
+    try {
+        DB::transaction(function () use ($product): void {
+            $product->saveLocales(['en' => ['name' => 'Black']]);
+
+            throw new RuntimeException('rollback');
+        });
+    } catch (RuntimeException) {
+    }
+
+    Event::assertNotDispatched(TranslationChanged::class);
+
+    DB::transaction(fn (): Product => $product->saveLocales(['en' => ['name' => 'Black']]));
+
+    Event::assertDispatchedTimes(TranslationChanged::class, 1);
 });

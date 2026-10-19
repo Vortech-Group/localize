@@ -50,20 +50,20 @@ php artisan localize:install
 ### 1. Declare the model
 
 ```php
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Vortech\Localize\Attributes\Localized;
 use Vortech\Localize\HasLocales;
 
+#[Fillable('sku', 'price', 'stock')]
 #[Localized('slug', 'name', 'description')]
 class Product extends Model
 {
     use HasLocales;
-
-    protected $fillable = ['sku', 'price', 'stock'];
 }
 ```
 
-The listed columns are not part of the model's `$fillable`: they live in the translation table and are checked against the attribute's whitelist.
+The listed columns are not part of the model's fillable columns: they live in the translation table and are checked against the attribute's whitelist.
 
 ### 2. Create the tables
 
@@ -178,7 +178,7 @@ $product = DB::transaction(fn (): Product => Product::create([...])->saveLocales
 ]));
 ```
 
-Rows are inserted or updated, never upserted. On MySQL an upsert reacts to any unique index, so a slug clash could overwrite another product's row; here a clash raises a `QueryException` and the whole call rolls back. Two requests creating the same locale row for the first time at the same moment can also end in that exception: the unique index decides, and the loser should retry. There are no model events on the translation rows.
+Rows are inserted or updated, never upserted. On MySQL an upsert reacts to any unique index, so a slug clash could overwrite another product's row; here a clash raises a `QueryException` and the whole call rolls back. Two requests creating the same locale row for the first time at the same moment can also end in that exception: the unique index decides, and the loser should retry. There are no Eloquent events on the translation rows; see [Events](#events) for the one this package dispatches.
 
 ### 5. Validate
 
@@ -214,19 +214,23 @@ use Vortech\Localize\Rules\UniqueTranslation;
 `locales()` is a normal `HasMany` of the stored rows. The view reads the loaded relation, so after eager loading there are no queries per model:
 
 ```php
-$products = Product::query()->with('locales')->get();
+$products = Product::query()->withLocales()->get();
 
 foreach ($products as $product) {
     echo $product->locale('en')->name;
 }
 ```
 
-To load fewer rows, include every locale you read plus the app locale you fall back to:
+To load fewer rows, name the locales you read. The app locale you fall back to is always included:
 
 ```php
-$locales = array_values(array_unique(['en', app()->getLocale()]));
+Product::query()->withLocales(['en'])->get();
+```
 
-Product::query()->with(['locales' => fn ($query) => $query->whereIn('locale', $locales)])->get();
+A callback as the second argument narrows the loaded rows further. It receives the translation table query, and a row it leaves out is also missing from the fallback:
+
+```php
+Product::query()->withLocales(['en'], fn ($rows) => $rows->whereNotNull('slug'))->get();
 ```
 
 If the relation is not loaded, the normal Laravel lazy loading rules apply, including `Model::preventLazyLoading()`. After a save, a loaded relation is reloaded; after `refresh()` the next read is current. A change made by another process or rolled back by an outer transaction is not seen until you reload.
@@ -245,20 +249,39 @@ $form = [
 
 The view is `Arrayable`, `Jsonable` (`toJson()`) and `JsonSerializable`, with the declared columns in declaration order. The model's own `toArray()` is untouched; in an API resource add `'translation' => $this->resource->locale()->toArray()`.
 
+#### Events
+
+After a write is committed, one `Vortech\Localize\Events\TranslationChanged` event is dispatched for every column that changed value. A column saved with the value it already has dispatches nothing, and neither does a write that fails.
+
+```php
+Event::listen(function (TranslationChanged $event) {
+    // $event->model     the owner (Product)
+    // $event->key       'name'
+    // $event->locale    'hu'
+    // $event->oldValue  null on a new row
+    // $event->newValue
+});
+```
+
+A generated slug is a change like any other, so it dispatches too.
+
 ### 8. Query
 
 Filtering by a translated column is explicit, in the locale you name:
 
 ```php
+Product::query()->whereLocale('name', 'en')->get();              // models with an English name
+Product::query()->whereLocales('name', ['en', 'hu'])->get();     // with a name in English or Hungarian
+
 Product::query()
-    ->whereLocale('en', fn ($query) => $query->where('slug', 'black-t-shirt'))
+    ->whereHasLocale('en', fn ($query) => $query->where('slug', 'black-t-shirt'))
     ->withLocales()
     ->firstOrFail();
 
-Product::query()->whereLocale('de')->get();       // models that have a German row at all
+Product::query()->whereHasLocale('de')->get();    // models that have a German row at all
 ```
 
-`whereLocale()` matches stored rows only: display fallback never changes what a query finds. The callback receives the translation table query. `withLocales()` eager loads the stored rows; `withLocales(['en'])` loads only those locales plus the current app locale, which the fallback reads. Both are Eloquent scopes, so they chain with anything and work on relations. Underneath it is a plain `whereHas('locales', ...)` / `with('locales')` if you prefer that.
+`whereLocale()` and `whereLocales()` take a translatable column (anything else throws `UnknownTranslationAttribute`) and match rows where it is not null. `whereHasLocale()` takes a callback that receives the translation table query. None of them use the display fallback: it never changes what a query finds. `withLocales()` eager loads the stored rows; `withLocales(['en'])` loads only those locales plus the current app locale, which the fallback reads. All of them are Eloquent scopes, so they chain with anything and work on relations.
 
 Route model binding by a translated slug is described under Slugs.
 
@@ -385,7 +408,7 @@ There is no `x-default` alternate.
 ## Good to know
 
 - **Reading is explicit by default.** `$product->name` is not translated for you unless the model opts in with `#[Localized(..., magic: true)]`, and the model's own `toArray()` is untouched either way.
-- **Eloquent events do not fire** on the translation rows. Writes go through the query builder.
+- **Eloquent events do not fire** on the translation rows. Writes go through the query builder; listen to `TranslationChanged` instead.
 - **Insert or update, never upsert.** A unique-index clash raises a `QueryException` and rolls the call back instead of rewriting another model's row. Two requests creating the same locale row at the same moment can hit that too: the index decides, retry the loser.
 - **Values are strings or `null`.** Arrays, files and relations are not translatable.
 - **Databases:** SQLite, MySQL and PostgreSQL run in CI. MariaDB is not tested and not assumed to behave like MySQL.

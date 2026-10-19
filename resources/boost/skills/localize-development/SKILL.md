@@ -1,6 +1,6 @@
 ---
 name: localize-development
-description: Build, query and debug translated Eloquent models with vortech/laravel-localize. Activate when working with #[Localized], #[LocalizedSlug], the HasLocales trait, locale(), saveLocales(), whereLocale(), withLocales(), UniqueTranslation, Route::localized(), SetLocale, LocaleLinks, the localize components, or the localize:install and localize:table commands, and when a write fails with UnknownTranslationAttribute, InvalidTranslationPayload, UnsavedTranslationOwner or InvalidTranslationDefinition.
+description: Build, query and debug translated Eloquent models with vortech/laravel-localize. Activate when working with #[Localized], #[LocalizedSlug], the HasLocales trait, locale(), saveLocales(), whereLocale(), whereLocales(), whereHasLocale(), withLocales(), UniqueTranslation, Route::localized(), SetLocale, LocaleLinks, the localize components, or the localize:install and localize:table commands, and when a write fails with UnknownTranslationAttribute, InvalidTranslationPayload, UnsavedTranslationOwner or InvalidTranslationDefinition.
 ---
 
 # Localize development
@@ -23,12 +23,11 @@ Config (`config/localize.php`): `locale_length` (35, must match the `locale` col
 ## Declare a model
 
 ```php
+#[Fillable('sku', 'price')]   // not the translated columns
 #[Localized('slug', 'name', 'description')]
 class Product extends Model
 {
     use HasLocales;
-
-    protected $fillable = ['sku', 'price'];   // not the translated columns
 }
 ```
 
@@ -78,18 +77,18 @@ $product->saveLocales([                                                  // seve
 - The whole payload is validated before the first query; everything then runs in one transaction on the model's connection, writing only the submitted columns.
 - The model must be saved: `UnsavedTranslationOwner` otherwise. To create a model and its translations together use `DB::transaction(fn () => Model::create([...])->saveLocales([...]))`.
 - Rows are inserted or updated, **never upserted**: a unique-index clash (a taken slug) throws a `QueryException` and rolls the call back instead of rewriting another model's row. Locale keys are used exactly as given (`en-GB`, `pt_BR`).
-- Writes go through the query builder: no Eloquent events on the translation rows. After a save a loaded `locales` relation is reloaded.
+- Writes go through the query builder: no Eloquent events on the translation rows; instead `Vortech\Localize\Events\TranslationChanged` (model, key, locale, oldValue, newValue) is dispatched after commit for every changed column. After a save a loaded `locales` relation is reloaded.
 - Never copy a fallback value into a locale; fallback is read-only.
 
 ## Query and eager load
 
 ```php
 Product::query()
-    ->whereLocale('en', fn ($query) => $query->where('slug', 'black-t-shirt'))
+    ->whereHasLocale('en', fn ($query) => $query->where('slug', 'black-t-shirt'))
     ->withLocales()                 // or withLocales(['en']): those plus the app locale
     ->firstOrFail();
 
-Product::with('locales')->get();    // the stored rows; no N+1 when reading
+Product::withLocales()->get();      // the stored rows; no N+1 when reading
 ```
 
 - The relation is `locales()` (a `HasMany` of stored rows), not the resolved values. `translations()` does not exist.

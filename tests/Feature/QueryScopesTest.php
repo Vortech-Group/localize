@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
+use Vortech\Localize\Exceptions\UnknownTranslationAttribute;
 use Vortech\Localize\Tests\Fixtures\Product;
 
 beforeEach(function (): void {
@@ -15,28 +16,28 @@ beforeEach(function (): void {
 });
 
 it('finds models by a column of one locale', function (): void {
-    $found = Product::query()->whereLocale('en', fn (Builder $query) => $query->where('slug', 'black-t-shirt'))->get();
+    $found = Product::query()->whereHasLocale('en', fn (Builder $query) => $query->where('slug', 'black-t-shirt'))->get();
 
     expect($found->pluck('sku')->all())->toBe(['A']);
 });
 
 it('does not match the same value in another locale', function (): void {
-    expect(Product::query()->whereLocale('hu', fn (Builder $query) => $query->where('slug', 'black-t-shirt'))->exists())->toBeFalse();
+    expect(Product::query()->whereHasLocale('hu', fn (Builder $query) => $query->where('slug', 'black-t-shirt'))->exists())->toBeFalse();
 });
 
 it('finds models that have a row in the locale without a callback', function (): void {
-    expect(Product::query()->whereLocale('de')->pluck('sku')->all())->toBe(['B'])
-        ->and(Product::query()->whereLocale('fr')->exists())->toBeFalse();
+    expect(Product::query()->whereHasLocale('de')->pluck('sku')->all())->toBe(['B'])
+        ->and(Product::query()->whereHasLocale('fr')->exists())->toBeFalse();
 });
 
 it('does not use the display fallback in a query', function (): void {
-    expect(Product::query()->whereLocale('de', fn (Builder $query) => $query->where('name', 'Fekete'))->exists())->toBeFalse();
+    expect(Product::query()->whereHasLocale('de', fn (Builder $query) => $query->where('name', 'Fekete'))->exists())->toBeFalse();
 });
 
 it('combines with other constraints and the model scope can be chained', function (): void {
     $found = Product::query()
         ->where('sku', 'B')
-        ->whereLocale('en', fn (Builder $query) => $query->where('name', 'like', 'W%'))
+        ->whereHasLocale('en', fn (Builder $query) => $query->where('name', 'like', 'W%'))
         ->withLocales()
         ->firstOrFail();
 
@@ -68,4 +69,40 @@ it('accepts a single locale as a string', function (): void {
 
     expect($product->locales->pluck('locale')->all())->toBe(['de'])
         ->and($product->locale('de')->name)->toBe('Weiss');
+});
+
+it('finds models with a value in a column in a locale', function (): void {
+    expect(Product::query()->whereLocale('name', 'en')->pluck('sku')->all())->toBe(['A', 'B'])
+        ->and(Product::query()->whereLocale('name', 'de')->pluck('sku')->all())->toBe(['B'])
+        ->and(Product::query()->whereLocale('slug', 'de')->exists())->toBeFalse();
+});
+
+it('finds models with a value in any of the locales', function (): void {
+    expect(Product::query()->whereLocales('name', ['hu', 'de'])->pluck('sku')->all())->toBe(['A', 'B'])
+        ->and(Product::query()->whereLocales('name', ['fr'])->exists())->toBeFalse();
+});
+
+it('refuses a column that is not translatable', function (): void {
+    Product::query()->whereLocale('sku', 'en');
+})->throws(UnknownTranslationAttribute::class);
+
+it('narrows the eager loaded rows with a callback', function (): void {
+    $products = Product::query()
+        ->withLocales(['en'], fn (Builder $rows) => $rows->whereNotNull('slug'))
+        ->orderBy('sku')
+        ->get();
+
+    expect($products->first()->relationLoaded('locales'))->toBeTrue()
+        ->and($products->first()->locales->pluck('locale')->sort()->values()->all())->toBe(['en', 'hu'])
+        ->and($products[1]->locales->pluck('locale')->all())->toBe(['en']);
+});
+
+it('narrows all locales with a callback alone', function (): void {
+    $products = Product::query()
+        ->withLocales(callback: fn (Builder $rows) => $rows->where('locale', 'de'))
+        ->orderBy('sku')
+        ->get();
+
+    expect($products->first()->locales)->toHaveCount(0)
+        ->and($products[1]->locales->pluck('locale')->all())->toBe(['de']);
 });

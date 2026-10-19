@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Vortech\Localize;
 
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Str;
+use stdClass;
 use Vortech\Localize\Attributes\LocalizedSlug;
+use Vortech\Localize\Events\TranslationChanged;
 use Vortech\Localize\Exceptions\InvalidTranslationPayload;
 use Vortech\Localize\Exceptions\UnknownTranslationAttribute;
 use Vortech\Localize\Exceptions\UnsavedTranslationOwner;
@@ -54,12 +57,19 @@ final class TranslationWriter
 
         $connection = $owner->getConnection();
 
-        $connection->transaction(function () use ($owner, $metadata, $payload, $connection): void {
-            $this->persist($connection, $owner, $metadata, $payload);
-        });
+        $events = $connection->transaction(fn (): array => $this->persist($connection, $owner, $metadata, $payload));
 
         if ($owner->relationLoaded('locales')) {
             $owner->load('locales');
+        }
+
+        if ($events !== []) {
+            $dispatcher = resolve(Dispatcher::class);
+
+            // Waits for an outer transaction, so a rolled back write announces nothing.
+            $connection->afterCommit(static function () use ($dispatcher, $events): void {
+                array_map($dispatcher->dispatch(...), $events);
+            });
         }
     }
 
@@ -173,24 +183,37 @@ final class TranslationWriter
 
     /**
      * @param  array<string, array<string, string|null>>  $payload
+     * @return list<TranslationChanged>
      */
-    private function persist(Connection $connection, Model $owner, TranslationMetadata $metadata, array $payload): void
+    private function persist(Connection $connection, Model $owner, TranslationMetadata $metadata, array $payload): array
     {
         $key = $owner->getAttribute($metadata->ownerKey);
         $now = TranslationRow::for($metadata)->freshTimestampString();
 
-        $stored = $connection->table($metadata->table)
+        $rows = $connection->table($metadata->table)
             ->where($metadata->foreignKey, $key)
             ->whereIn('locale', array_keys($payload))
-            ->pluck($metadata->slug->to ?? 'locale', 'locale')
-            ->all();
-        $existing = array_map(strval(...), array_keys($stored));
+            ->get(['locale', ...$metadata->fields])
+            ->keyBy('locale');
+        $existing = array_map(strval(...), $rows->keys()->all());
+        $stored = $rows->map(fn (object $row): mixed => $row->{$metadata->slug->to ?? 'locale'} ?? null)->all();
 
         $payload = $this->withSlugs($connection, $metadata, $key, $payload, $stored);
 
+        $events = [];
         $inserts = [];
 
         foreach ($payload as $locale => $values) {
+            $row = $rows->get($locale);
+
+            foreach ($values as $field => $value) {
+                $old = $row instanceof stdClass && is_string($row->{$field}) ? $row->{$field} : null;
+
+                if ($old !== $value) {
+                    $events[] = new TranslationChanged($owner, $field, $locale, $old, $value);
+                }
+            }
+
             if (in_array($locale, $existing, true)) {
                 $connection->table($metadata->table)
                     ->where($metadata->foreignKey, $key)
@@ -210,8 +233,10 @@ final class TranslationWriter
             ];
         }
 
-        foreach ($inserts as $rows) {
-            $connection->table($metadata->table)->insert($rows);
+        foreach ($inserts as $batch) {
+            $connection->table($metadata->table)->insert($batch);
         }
+
+        return $events;
     }
 }

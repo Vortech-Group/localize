@@ -15,6 +15,7 @@ use Illuminate\Support\Str;
 use LogicException;
 use Vortech\Localize\Attributes\LocalizedSlug;
 use Vortech\Localize\Exceptions\InvalidTranslationPayload;
+use Vortech\Localize\Exceptions\UnknownTranslationAttribute;
 
 /**
  * Adds translations to an Eloquent model that declares #[Localized(...)].
@@ -38,15 +39,46 @@ trait HasLocales
     }
 
     /**
+     * Models with a value in the column in the locale: whereLocale('name', 'en').
+     * It matches stored rows only; there is no display fallback in a query.
+     *
+     * @param  Builder<static>  $query
+     */
+    #[Scope]
+    protected function whereLocale(Builder $query, string $column, string $locale): void
+    {
+        $this->whereLocales($query, $column, [$locale]);
+    }
+
+    /**
+     * Models with a value in the column in any of the locales:
+     * whereLocales('name', ['en', 'nl']).
+     *
+     * @param  Builder<static>  $query
+     * @param  list<string>  $locales
+     */
+    #[Scope]
+    protected function whereLocales(Builder $query, string $column, array $locales): void
+    {
+        if (! in_array($column, TranslationMetadata::of($this)->fields, true)) {
+            throw UnknownTranslationAttribute::for(static::class, $column);
+        }
+
+        $query->whereHas('locales', static function (Builder $rows) use ($column, $locales): void {
+            $rows->getQuery()->whereIn('locale', $locales)->whereNotNull($column);
+        });
+    }
+
+    /**
      * Models that have a row in the locale, optionally narrowed by a callback on
-     * that row: whereLocale('en', fn ($query) => $query->where('slug', 'black')).
+     * that row: whereHasLocale('en', fn ($query) => $query->where('slug', 'black')).
      * It matches stored rows only; there is no display fallback in a query.
      *
      * @param  Builder<static>  $query
      * @param  (Closure(Builder<TranslationRow>): mixed)|null  $callback
      */
     #[Scope]
-    protected function whereLocale(Builder $query, string $locale, ?Closure $callback = null): void
+    protected function whereHasLocale(Builder $query, string $locale, ?Closure $callback = null): void
     {
         $query->whereHas('locales', static function (Builder $rows) use ($locale, $callback): void {
             $rows->where('locale', $locale);
@@ -60,23 +92,29 @@ trait HasLocales
     /**
      * Eager loads the stored rows. With locales, only those and the current app
      * locale are loaded (the one the fallback reads), which is all a view in
-     * one of them needs.
+     * one of them needs. The callback narrows the loaded rows further, so a
+     * row it leaves out is also missing from the fallback.
      *
      * @param  Builder<static>  $query
      * @param  string|list<string>|null  $locales
+     * @param  (Closure(Builder<TranslationRow>): mixed)|null  $callback
      */
     #[Scope]
-    protected function withLocales(Builder $query, string|array|null $locales = null): void
+    protected function withLocales(Builder $query, string|array|null $locales = null, ?Closure $callback = null): void
     {
-        if ($locales === null) {
-            $query->with('locales');
+        $wanted = $locales === null ? null : array_values(array_unique([...(array) $locales, app()->getLocale()]));
 
-            return;
-        }
+        $query->with(['locales' => static function (Relation $rows) use ($wanted, $callback): void {
+            $rowQuery = $rows->getQuery();
 
-        $wanted = array_values(array_unique([...(array) $locales, app()->getLocale()]));
+            if ($wanted !== null) {
+                $rowQuery->getQuery()->whereIn('locale', $wanted);
+            }
 
-        $query->with(['locales' => static fn (Relation $rows) => $rows->getQuery()->getQuery()->whereIn('locale', $wanted)]);
+            if ($callback instanceof Closure) {
+                $callback($rowQuery);
+            }
+        }]);
     }
 
     /**
