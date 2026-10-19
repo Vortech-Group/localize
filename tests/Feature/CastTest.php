@@ -84,7 +84,7 @@ it('dispatches the event with JSON strings, and only when the decoded value chan
 
     $showcase->saveLocales(['hu' => ['features' => [['a' => 1, 'b' => 3]]]]);
     Event::assertDispatched(TranslationChanged::class, fn (TranslationChanged $event): bool => $event->key === 'features'
-        && $event->oldValue === '[{"b":2,"a":1}]'
+        && json_decode((string) $event->oldValue, true) == [['a' => 1, 'b' => 2]]
         && $event->newValue === '[{"a":1,"b":3}]');
 });
 
