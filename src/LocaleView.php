@@ -19,7 +19,7 @@ use Vortech\Localize\Rules\UniqueTranslation;
  * The view keeps no copy of the data: every read goes to the model's loaded
  * `locales` relation, so a refresh or a save is visible immediately.
  *
- * @implements Arrayable<string, string|null>
+ * @implements Arrayable<string, string|array<array-key, mixed>|null>
  */
 final readonly class LocaleView implements Arrayable, Jsonable, JsonSerializable
 {
@@ -30,7 +30,10 @@ final readonly class LocaleView implements Arrayable, Jsonable, JsonSerializable
         private bool $fallback,
     ) {}
 
-    public function __get(string $name): ?string
+    /**
+     * @return string|array<array-key, mixed>|null
+     */
+    public function __get(string $name): string|array|null
     {
         return $this->value($name);
     }
@@ -38,7 +41,10 @@ final readonly class LocaleView implements Arrayable, Jsonable, JsonSerializable
     /**
      * The same as reading the column as a property, for a column name in a variable.
      */
-    public function get(string $field): ?string
+    /**
+     * @return string|array<array-key, mixed>|null
+     */
+    public function get(string $field): string|array|null
     {
         return $this->value($field);
     }
@@ -66,7 +72,7 @@ final readonly class LocaleView implements Arrayable, Jsonable, JsonSerializable
     /**
      * Saves the given columns to this view's locale right away, and returns the view.
      *
-     * @param  array<string, string|null>  $attributes
+     * @param  array<string, string|array<array-key, mixed>|null>  $attributes
      */
     public function update(array $attributes): static
     {
@@ -89,7 +95,7 @@ final readonly class LocaleView implements Arrayable, Jsonable, JsonSerializable
     /**
      * Every declared column in declaration order, resolved with this view's fallback.
      *
-     * @return array<string, string|null>
+     * @return array<string, string|array<array-key, mixed>|null>
      */
     public function toArray(): array
     {
@@ -111,7 +117,7 @@ final readonly class LocaleView implements Arrayable, Jsonable, JsonSerializable
     }
 
     /**
-     * @return array<string, string|null>
+     * @return array<string, string|array<array-key, mixed>|null>
      */
     public function jsonSerialize(): array
     {
@@ -126,7 +132,10 @@ final readonly class LocaleView implements Arrayable, Jsonable, JsonSerializable
         return TranslationMetadata::fields($this->owner::class);
     }
 
-    private function value(string $field): ?string
+    /**
+     * @return string|array<array-key, mixed>|null
+     */
+    private function value(string $field): string|array|null
     {
         if (! in_array($field, $this->fields(), true)) {
             throw UnknownTranslationAttribute::for($this->owner::class, $field);
@@ -153,8 +162,9 @@ final readonly class LocaleView implements Arrayable, Jsonable, JsonSerializable
 
     /**
      * @param  Collection<array-key, Model>  $rows
+     * @return string|array<array-key, mixed>|null
      */
-    private function stored(Collection $rows, string $locale, string $field): ?string
+    private function stored(Collection $rows, string $locale, string $field): string|array|null
     {
         $row = $rows->first(static fn (Model $row): bool => $row instanceof TranslationRow && $row->locale === $locale);
 
@@ -163,6 +173,12 @@ final readonly class LocaleView implements Arrayable, Jsonable, JsonSerializable
         }
 
         $value = $row->getAttribute($field);
+
+        if (array_key_exists($field, TranslationMetadata::casts($this->owner::class))) {
+            $decoded = is_string($value) ? json_decode($value, true) : null;
+
+            return is_array($decoded) ? $decoded : null;
+        }
 
         return is_scalar($value) ? (string) $value : null;
     }

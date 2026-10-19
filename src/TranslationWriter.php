@@ -9,6 +9,7 @@ use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Str;
+use JsonException;
 use stdClass;
 use Vortech\Localize\Attributes\LocalizedSlug;
 use Vortech\Localize\Events\TranslationChanged;
@@ -98,11 +99,9 @@ final class TranslationWriter
                     throw UnknownTranslationAttribute::for($owner::class, $field);
                 }
 
-                if ($value !== null && ! is_string($value)) {
-                    throw InvalidTranslationPayload::invalidValue($locale, $field, $value);
-                }
-
-                $clean[$field] = $value;
+                $clean[$field] = array_key_exists($field, $metadata->casts)
+                    ? $this->encoded($locale, $field, $value)
+                    : $this->plain($locale, $field, $value);
             }
 
             if ($clean !== []) {
@@ -111,6 +110,63 @@ final class TranslationWriter
         }
 
         return $payload;
+    }
+
+    private function plain(string $locale, string $field, mixed $value): ?string
+    {
+        if ($value !== null && ! is_string($value)) {
+            throw InvalidTranslationPayload::invalidValue($locale, $field, $value);
+        }
+
+        return $value;
+    }
+
+    /**
+     * The JSON of an `array` cast column; `null` clears it.
+     */
+    private function encoded(string $locale, string $field, mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (! is_array($value)) {
+            throw InvalidTranslationPayload::invalidCastValue($locale, $field, $value);
+        }
+
+        try {
+            return json_encode($value, JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
+            throw InvalidTranslationPayload::invalidCastValue($locale, $field, $value);
+        }
+    }
+
+    /**
+     * Whether a stored value and a new one differ. JSON is compared decoded and with
+     * sorted keys, because the database may reformat or reorder what it stores.
+     */
+    private function differs(?string $old, ?string $new, bool $json): bool
+    {
+        if (! $json || $old === null || $new === null) {
+            return $old !== $new;
+        }
+
+        return $this->canonical(json_decode($old, true)) !== $this->canonical(json_decode($new, true));
+    }
+
+    private function canonical(mixed $value): mixed
+    {
+        if (! is_array($value)) {
+            return $value;
+        }
+
+        $value = array_map($this->canonical(...), $value);
+
+        if (! array_is_list($value)) {
+            ksort($value);
+        }
+
+        return $value;
     }
 
     /**
@@ -209,7 +265,7 @@ final class TranslationWriter
             foreach ($values as $field => $value) {
                 $old = $row instanceof stdClass && is_string($row->{$field}) ? $row->{$field} : null;
 
-                if ($old !== $value) {
+                if ($this->differs($old, $value, array_key_exists($field, $metadata->casts))) {
                     $events[] = new TranslationChanged($owner, $field, $locale, $old, $value);
                 }
             }

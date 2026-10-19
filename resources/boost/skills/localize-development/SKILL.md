@@ -51,6 +51,7 @@ $product->locale('en')->toArray();                 // declared columns in order;
 - Reading an undeclared column throws `UnknownTranslationAttribute`. An unsaved model returns `null` for everything, without a query.
 - **Fill edit forms with `fallback: false`**, otherwise a user sees another language's text as a finished translation and saves it back.
 - `$view->name = 'x'` throws; write with `update()`.
+- **`casts`**: `#[Localized('title', 'features', casts: ['features' => 'array'])]` makes `features` take and return an array (stored as JSON; `localize:table` generates a `json` column). The cast on the owning model does not apply to translated columns. Only `array` is supported.
 - **`magic: true`**: `#[Localized('name', magic: true)]` makes `$model->name` read the current app locale (like `$model->locale()->name`; `$model->locale('hu')->name` keeps working). It uses the `locales` relation, so eager load in lists. Assigning it (also through `fill()` or `create()`) throws `LogicException`; save with `locale()->update()` or `saveLocales()`. A real attribute with a value wins, and the array form never includes the column. Without the option `$model->name` is simply `null`.
 
 ## Write

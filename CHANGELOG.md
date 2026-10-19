@@ -2,6 +2,14 @@
 
 All notable changes to `laravel-localize` will be documented in this file
 
+## 0.2.0 - 2026-10-19
+
+### Added
+
+- `#[Localized('title', 'features', casts: ['features' => 'array'])]`: a translated column can hold an array. It is stored as JSON, written from an array by `update()` and `saveLocales()` and read back as one by the view (`toArray()`, `toJson()`, `magic`), with per-column fallback (`[]` is kept, `null` falls back). `localize:table` generates a `json` column for it
+- `TranslationChanged` carries the JSON strings of an array column and only fires when the decoded value changed, regardless of key order
+- Unknown casts, casts on undeclared columns and non-array values throw
+
 ## 0.1.0 - 2026-10-18
 
 ### Added

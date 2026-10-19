@@ -138,6 +138,6 @@ final readonly class LocaleLinks
 
         $value = $view->get($slug->to);
 
-        return $value !== null && $value !== '' ? $value : null;
+        return is_string($value) && $value !== '' ? $value : null;
     }
 }

@@ -157,7 +157,11 @@ final class TableCommand extends Command implements PromptsForMissingInput
         $columns = '';
 
         foreach ($metadata->fields as $field) {
-            $type = in_array($field, self::TEXT_COLUMNS, true) ? 'text' : 'string';
+            $type = match (true) {
+                array_key_exists($field, $metadata->casts) => 'json',
+                in_array($field, self::TEXT_COLUMNS, true) => 'text',
+                default => 'string',
+            };
             $columns .= sprintf("            \$table->%s('%s')->nullable();\n", $type, $field);
         }
 

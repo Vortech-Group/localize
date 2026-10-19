@@ -389,6 +389,23 @@ Two Blade components cover the common case:
 
 There is no `x-default` alternate.
 
+### JSON columns
+
+A column can hold structured data. Cast it with `array` and write and read it as an array:
+
+```php
+#[Localized('title', 'features', casts: ['features' => 'array'])]
+class Reference extends Model { use HasLocales; }
+
+$reference->saveLocales(['hu' => ['features' => [['icon' => 'bolt', 'title' => 'Gyors']]]]);
+
+$reference->locale('hu')->features;   // [['icon' => 'bolt', 'title' => 'Gyors']]
+```
+
+- `localize:table` generates a `json` column for it. The cast on the owning model does not apply: translated columns live on the translation row.
+- Fallback works as for any column: `null` falls back, `[]` is returned as stored. `TranslationChanged` carries the JSON strings and fires only when the decoded value changed, key order aside.
+- Only `array` is supported, and a cast on an undeclared column throws `InvalidTranslationDefinition`. `whereLocale()` only checks that the column is not `null`.
+
 ### Declaration rules
 
 - The list cannot be empty, and entries must be plain column names (no JSON paths or expressions).
@@ -410,7 +427,7 @@ There is no `x-default` alternate.
 - **Reading is explicit by default.** `$product->name` is not translated for you unless the model opts in with `#[Localized(..., magic: true)]`, and the model's own `toArray()` is untouched either way.
 - **Eloquent events do not fire** on the translation rows. Writes go through the query builder; listen to `TranslationChanged` instead.
 - **Insert or update, never upsert.** A unique-index clash raises a `QueryException` and rolls the call back instead of rewriting another model's row. Two requests creating the same locale row at the same moment can hit that too: the index decides, retry the loser.
-- **Values are strings or `null`.** Arrays, files and relations are not translatable.
+- **Values are strings or `null`,** except for columns declared with `casts: ['features' => 'array']`, which take an array (or `null`). Files and relations are not translatable.
 - **Databases:** SQLite, MySQL and PostgreSQL run in CI. MariaDB is not tested and not assumed to behave like MySQL.
 
 ## Testing

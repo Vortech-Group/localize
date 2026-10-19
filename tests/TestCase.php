@@ -86,6 +86,22 @@ abstract class TestCase extends Orchestra
             $table->unique(['clinic_id', 'locale']);
         });
 
+        Schema::create('showcases', function (Blueprint $table): void {
+            $table->id();
+            $table->timestamps();
+        });
+
+        Schema::create('showcase_translations', function (Blueprint $table): void {
+            $table->id();
+            $table->foreignId('showcase_id')->constrained('showcases')->cascadeOnDelete();
+            $table->string('locale', 35);
+            $table->string('title')->nullable();
+            $table->json('features')->nullable();
+            $table->timestamps();
+
+            $table->unique(['showcase_id', 'locale']);
+        });
+
         Schema::create('articles', function (Blueprint $table): void {
             $table->ulid('id')->primary();
             $table->softDeletes();

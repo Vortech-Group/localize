@@ -27,4 +27,9 @@ final class InvalidTranslationPayload extends LocalizeException
     {
         return new self(sprintf('"%s.%s" must be a string or null, %s given.', $locale, $field, get_debug_type($value)));
     }
+
+    public static function invalidCastValue(string $locale, string $field, mixed $value): self
+    {
+        return new self(sprintf('"%s.%s" is an array column and must be an array that encodes to JSON, or null, %s given.', $locale, $field, get_debug_type($value)));
+    }
 }

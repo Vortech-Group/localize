@@ -30,11 +30,15 @@ final class TranslationMetadata
     /** @var array<class-string, bool> */
     private static array $magic = [];
 
+    /** @var array<class-string, array<string, string>> */
+    private static array $castColumns = [];
+
     /** @var array<class-string, ?LocalizedSlug> */
     private static array $slugs = [];
 
     /**
      * @param  list<string>  $fields
+     * @param  array<string, string>  $casts
      */
     private function __construct(
         public readonly array $fields,
@@ -43,6 +47,7 @@ final class TranslationMetadata
         public readonly string $ownerKey,
         public readonly ?string $connection,
         public readonly ?LocalizedSlug $slug = null,
+        public readonly array $casts = [],
     ) {}
 
     public static function of(Model $model): self
@@ -71,6 +76,7 @@ final class TranslationMetadata
             ownerKey: $model->getKeyName(),
             connection: $model->getConnectionName(),
             slug: self::slug($model::class, $fields),
+            casts: self::casts($model::class),
         );
     }
 
@@ -84,6 +90,19 @@ final class TranslationMetadata
     public static function fields(string $class): array
     {
         return self::$declared[$class] ??= self::resolve($class);
+    }
+
+    /**
+     * The cast columns (column => cast) of the nearest #[Localized] declaration.
+     *
+     * @param  class-string  $class
+     * @return array<string, string>
+     */
+    public static function casts(string $class): array
+    {
+        self::fields($class);
+
+        return self::$castColumns[$class];
     }
 
     /**
@@ -145,6 +164,7 @@ final class TranslationMetadata
     {
         self::$declared = [];
         self::$magic = [];
+        self::$castColumns = [];
         self::$slugs = [];
     }
 
@@ -178,7 +198,14 @@ final class TranslationMetadata
                 }
             }
 
+            foreach (array_keys($localized->casts) as $column) {
+                if (! in_array($column, $fields, true)) {
+                    throw InvalidTranslationDefinition::invalid(sprintf('%s casts "%s", which is not declared with #[Localized].', $reflection->getName(), $column));
+                }
+            }
+
             self::$magic[$class] = $localized->magic;
+            self::$castColumns[$class] = $localized->casts;
 
             return $fields;
         }
